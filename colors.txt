@@ -1,0 +1,6 @@
+[36m
+hello36
+[35m
+hello35
+[37m
+hello end
