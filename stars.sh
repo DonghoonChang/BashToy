@@ -3,11 +3,21 @@
 stty -echo
 tput civis
 
-# SCREEN
+# SCREEN(Frames)
+read_timeout=0.01
+refresh_interval=0.001
+
+# Screen(Size)
 screen_cols=0
 screen_lines=0
-read_timeout=0.001
-refresh_interval=0.001
+screen_available_cols=0
+screen_available_lines=0
+
+# Stars Gen Boundary
+margin_left=20
+margin_right=20
+margin_bottom=15
+margin_top=15
 
 # INPUT
 input_chars_count=3 # max number of input chars per frame
@@ -16,19 +26,19 @@ input_buffer=""
 next_char=""
 
 # OUTPUT
-temp_file=".stars_temp"
-print_file=".stars_print"
-next_line=""
+file_temp=".stars_temp"
+file_print=".stars_print"
 bg_char=" "
 
-# STARS
-stars_count_max=50
+# STARS(Appearance)
+stars_count_max=10
 star_tail_char="|"
 star_head_char="*"
 star_tail_length=5
 star_speed=1 #downward speed per frame
 
-star_state_exploding=-1
+# STARS(State)
+star_state_eol=-1 #End of Life
 star_state_none=0
 star_state_created=1
 
@@ -43,6 +53,8 @@ declare -a star_cols
 get_screen_size () {
 	screen_cols=$(tput cols)
 	screen_lines=$(tput lines)
+	screen_available_cols=$(( $screen_cols - $margin_left - $margin_right ))
+	screen_available_lines=$(( $screen_lines - $margin_top - $margin_bottom ))
 }
 
 # Input
@@ -64,25 +76,21 @@ get_next_char () {
 	next_char="${input_buffer:0:1}"
 	input_buffer="${input_buffer:1}"
 }
-# Helpers
-# $1: String $2: char
-insert_char_at () {
-	:
-	_length="${#$}"
-	
-}
 
+# Helpers
 DEBUG=0
+REMOVE_PRINT_FILES=1
 
 # Initalisation
 setup_cleanup () {
-	trap clean_up EXIT
+	trap cleanup EXIT
 }
 
 init () {
 	setup_cleanup
-	tput home
 	tput clear
+	touch "$file_temp"
+	touch "$file_print"
 	get_screen_size
 
 	stars_count_max=$(( $screen_cols / 5 ))
@@ -90,8 +98,17 @@ init () {
 	if [[ $1 == "-d" ]];
 	then
 		echo "Debuggging Set"
-		sleep 1
 		DEBUG=1
+		sleep 1
+	fi
+
+	if [[ $1 == "-D" ]];
+	then
+		echo "Debugging Set"
+		echo "Print files are not removed after exit"
+		REMOVE_PRINT_FILES=0
+		DEBUG=1
+		sleep 1
 	fi
 
 	for x in $(seq 0 1 $(( $stars_count_max - 1)));
@@ -114,7 +131,7 @@ insert_star () {
 		if [[ "${star_lines[$x]}" -eq "$star_state_none" ]];
 		then
 			star_lines[$x]=$star_state_created
-			star_cols[$x]=$(( $RANDOM % $screen_cols ))
+			star_cols[$x]=$(( $RANDOM % $screen_available_cols + $margin_left ))
 			break
 		fi
 	done
@@ -123,21 +140,24 @@ insert_star () {
 update_stars () {
 	for x in $(seq 0 1 $(( $stars_count_max - 1)));
 	do
-		if [[ ${star_lines[$x]} -ge $screen_lines ]];
+		if [[ ${star_lines[$x]} -ge $screen_available_lines ]];
 		then
-			star_lines[$x]="$star_state_exploding"
+			star_lines[$x]="$star_state_eol"
+			continue;
+		fi
 
-		elif [[ ${star_lines[$x]} -eq $star_state_exploding ]];
+		if [[ ${star_lines[$x]} -eq $star_state_eol ]];
 		then
 			star_lines[$x]="$star_state_none"
-
-		elif [[ ${star_lines[$x]} -eq $star_state_none ]];
-		then
-			: # Do nothing if there's no star at this index
-
-		else
-			star_lines[$x]="$(( ${star_lines[$x]} + $star_speed ))"
+			continue
 		fi
+
+		if [[ ${star_lines[$x]} -eq $star_state_none ]];
+		then
+			continue # Do nothing if there's no star at this index
+		fi 		
+
+		(( star_lines[$x]++ ))
 	done
 }
 
@@ -173,19 +193,27 @@ draw_line () {
 		fi
 	done
 
-	printf "%s" "${new_line[@]}" > "$temp_file"
-	printf "\n" >> "$temp_file"
-	cat "$print_file" >> "$temp_file"
-	head -n $(( $screen_lines - 5 )) "$temp_file" > "$print_file"
+	printf "%s" "${new_line[@]}" > "$file_temp"
+	printf "\n" >> "$file_temp"
+	cat "$file_print" >> "$file_temp"
+	head -n $screen_available_lines "$file_temp" > "$file_print"
 }
 
 draw_stars_from_file () {
-	tput home
-	cat "$print_file"
+	cat "$file_print"
+}
+
+draw_margin_top () {
+	for x in $(seq 1 1 $margin_top);
+	do
+		printf "\n"
+	done
 }
 
 render () {
 	draw_line
+	tput home
+	draw_margin_top
 	draw_stars_from_file
 
 	#draw_stars
@@ -258,13 +286,18 @@ print_states () {
 }
 
 # Clean up
-clean_up () {
+cleanup () {
 	echo "Cleaning up..."
 	stty echo
 	tput cnorm
+	
+	if [[ $REMOVE_PRINT_FILES -eq 1 ]];
+	then
+		rm $file_temp
+		rm $file_print
+	fi
 
-	rm $temp_file
-	rm $print_file
+	tput clear
 	exit $?
 }
 
