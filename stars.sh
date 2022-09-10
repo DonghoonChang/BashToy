@@ -7,7 +7,7 @@ tput civis
 screen_cols=0
 screen_lines=0
 read_timeout=0.001
-refresh_interval=0.05
+refresh_interval=0.001
 
 # INPUT
 input_chars_count=3 # max number of input chars per frame
@@ -23,8 +23,10 @@ bg_char=" "
 
 # STARS
 stars_count_max=50
+star_tail_char="|"
+star_head_char="*"
 star_tail_length=5
-star_speed=2 #downward speed per frame
+star_speed=1 #downward speed per frame
 
 star_state_exploding=-1
 star_state_none=0
@@ -32,12 +34,10 @@ star_state_created=1
 
 # Debug
 debug_line=50
-debug_col=50
+debug_col=5
 
-declare -a star_chars
 declare -a star_lines
 declare -a star_cols
-declare -a star_speeds
 
 # Screen
 get_screen_size () {
@@ -55,6 +55,11 @@ buffer_input () {
 	input=""
 }
 
+apply_input () {
+	buffer_input
+	insert_star
+}
+
 get_next_char () {
 	next_char="${input_buffer:0:1}"
 	input_buffer="${input_buffer:1}"
@@ -67,9 +72,28 @@ insert_char_at () {
 	
 }
 
+DEBUG=0
 
-# Stars
-init_stars () {
+# Initalisation
+setup_cleanup () {
+	trap clean_up EXIT
+}
+
+init () {
+	setup_cleanup
+	tput home
+	tput clear
+	get_screen_size
+
+	stars_count_max=$(( $screen_cols / 5 ))
+
+	if [[ $1 == "-d" ]];
+	then
+		echo "Debuggging Set"
+		sleep 1
+		DEBUG=1
+	fi
+
 	for x in $(seq 0 1 $(( $stars_count_max - 1)));
 	do
 		star_lines[$x]=$star_state_none
@@ -77,10 +101,7 @@ init_stars () {
 	done
 }
 
-get_new_star_col () {
-	return $(( $RANDOM % $screen_cols ))
-}
-
+# State management
 insert_star () {
 	get_next_char
 	if [[ "$next_char" == "" ]]
@@ -93,17 +114,13 @@ insert_star () {
 		if [[ "${star_lines[$x]}" -eq "$star_state_none" ]];
 		then
 			star_lines[$x]=$star_state_created
-			get_new_star_col
-			star_cols[$x]=$?
-			star_chars[$x]=$next_char
+			star_cols[$x]=$(( $RANDOM % $screen_cols ))
 			break
 		fi
 	done
 }
 
 update_stars () {
-	insert_star
-
 	for x in $(seq 0 1 $(( $stars_count_max - 1)));
 	do
 		if [[ ${star_lines[$x]} -ge $screen_lines ]];
@@ -137,11 +154,22 @@ draw_line () {
 	do
 		_line="${star_lines[$x]}"
 		_col="${star_cols[$x]}"
-		_char="${star_chars[$x]}"
-
-		if [[ $_line -gt $star_state_none ]] && [[ $_line -lt $star_tail_length ]];
+		
+		if [[ $_line -le $star_state_none ]];
 		then
-			new_line[$_col]="$_char"
+			continue
+		fi
+
+		if [[ $_line -eq $star_state_created ]];
+		then
+			new_line[$_col]="$star_head_char"
+			continue
+		fi
+
+
+		if [[ $_line -le $(( $star_tail_length + 1 )) ]]; # +1: Accounting for head
+		then
+			new_line[$_col]="$star_tail_char"
 		fi
 	done
 
@@ -153,12 +181,14 @@ draw_line () {
 
 draw_stars_from_file () {
 	tput home
-	tput clear
 	cat "$print_file"
 }
 
 render () {
-	echo "This is where all draw functions will be called"
+	draw_line
+	draw_stars_from_file
+
+	#draw_stars
 }
 
 # $1 = line $2 = col $3 = char
@@ -173,8 +203,8 @@ draw_star () {
 	tail_line_end=$(( $1 - $star_tail_length ))
 
 	# draw head
-	draw_at "$1" "$2" "$3"
-
+	draw_at "$1" "$2" "$star_head_char"
+	
 	# draw tail
 	for x in $(seq $tail_line_start -1 $tail_line_end);
 	do
@@ -192,13 +222,12 @@ draw_stars () {
 	do
 		_line="${star_lines[$x]}"
 		_col="${star_cols[$x]}"
-		_char="${star_chars[$x]}"
 
-		if [[ $_line -le 0 ]];
+		if [[ $_line -le $star_state_none ]];
 		then
 			:
 		else
-			draw_star $_line $_col $_char
+			draw_star $_line $_col 
 		fi
 	done
 }
@@ -211,15 +240,14 @@ print_star_lines () {
 
 print_star_cols () {
 	tput cup $(( $debug_line + 1 )) $debug_col
-
 	echo -n "Star Cols: ${star_cols[@]}"
 }
 
 print_input_buffer () {
-	tput cup $(( $debug_line + 2 )) $debug_col
+	tput cup $(( $debug_line + 3 )) $debug_col
 	echo -n "Input Buffer: $input_buffer"
 	
-	tput cup $(( $debug_line + 3 )) $debug_col
+	tput cup $(( $debug_line + 4 )) $debug_col
 	echo -n "Next Char: $next_char"
 }
 
@@ -241,29 +269,26 @@ clean_up () {
 }
 
 # Init
-init_stars
-trap clean_up EXIT
-trap clean_up SIGNINT
-trap clean_up SIGTERM
+init "$@"
 
 while true;
 do
-	# Adjust screen size
-	get_screen_size
-
-	# Drawing
-	draw_line
-	draw_stars_from_file
-
-	# Debugging
-	print_states
-
 	# Input
 	read_input
-	buffer_input
+	apply_input
+
+	# Drawing
+	render
+
+	# Debugging
+	if [[ $DEBUG -eq 1 ]];
+	then
+		print_states
+	fi
 
 	# State Management
 	update_stars
+
 	sleep $refresh_interval
 done
 
