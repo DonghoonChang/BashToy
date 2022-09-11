@@ -1,8 +1,5 @@
 #!/bin/bash
 
-stty -echo
-tput civis
-
 # SCREEN(Frames)
 read_timeout=0.01
 refresh_interval=0.001
@@ -14,10 +11,11 @@ screen_available_cols=0
 screen_available_lines=0
 
 # Stars Gen Boundary
-margin_left=20
-margin_right=20
+top_margin_left=15
+margin_left=35
+margin_right=35
 margin_bottom=15
-margin_top=15
+margin_top=16
 
 # INPUT
 input_chars_count=3 # max number of input chars per frame
@@ -46,6 +44,14 @@ star_state_created=1
 debug_line=50
 debug_col=5
 
+# Assets
+assets_cloud_top="cloud_top.txt"
+assets_cloud_large="cloud_large.txt"
+assets_cloud_medium="cloud_medium.txt"
+assets_cloud_small_1="cloud_small_1.txt"
+assets_cloud_small_2="cloud_small_2.txt"
+
+
 declare -a star_lines
 declare -a star_cols
 
@@ -55,6 +61,9 @@ get_screen_size () {
 	screen_lines=$(tput lines)
 	screen_available_cols=$(( $screen_cols - $margin_left - $margin_right ))
 	screen_available_lines=$(( $screen_lines - $margin_top - $margin_bottom ))
+	star_state_eol=$(( -1 + $margin_top ))
+	star_state_none=$(( 0 + $margin_top ))
+	star_state_created=$(( 1 + $margin_top ))
 }
 
 # Input
@@ -87,10 +96,14 @@ setup_cleanup () {
 }
 
 init () {
-	setup_cleanup
+ 	stty -echo
+	tput civis
+
 	tput clear
 	touch "$file_temp"
 	touch "$file_print"
+
+	setup_cleanup
 	get_screen_size
 
 	stars_count_max=$(( $screen_cols / 5 ))
@@ -165,12 +178,12 @@ update_stars () {
 draw_line () {
 	declare -a new_line
 	
-	for x in $(seq 1 $screen_cols);
+	for x in $(seq 0 $(( $screen_cols - 1)));
 	do
 		new_line[$x]="$bg_char"
 	done
 	
-	for x in $(seq 0 1 $(( $stars_count_max - 1)));
+	for x in $(seq 0 $(( $stars_count_max - 1)));
 	do
 		_line="${star_lines[$x]}"
 		_col="${star_cols[$x]}"
@@ -186,8 +199,7 @@ draw_line () {
 			continue
 		fi
 
-
-		if [[ $_line -le $(( $star_tail_length + 1 )) ]]; # +1: Accounting for head
+		if [[ $_line -le $(( $star_state_created + $star_tail_length)) ]]; 
 		then
 			new_line[$_col]="$star_tail_char"
 		fi
@@ -204,19 +216,37 @@ draw_stars_from_file () {
 }
 
 draw_margin_top () {
-	for x in $(seq 1 1 $margin_top);
+	for x in $(seq 1 $margin_top);
 	do
 		printf "\n"
 	done
 }
 
+draw_fg_top () {
+	tput home
+	while IFS= read -r line
+	do
+		for x in $(seq 1 $top_margin_left);
+		do
+			printf "%.*s" "$x" " "
+		done
+		echo "$line"
+	done < "$assets_cloud_top"
+}
+
+
 render () {
+	#draw_stars
+	#sleep 0.01
+
+	#Middle Layer
 	draw_line
 	tput home
 	draw_margin_top
 	draw_stars_from_file
 
-	#draw_stars
+	#Foregound
+	draw_fg_top
 }
 
 # $1 = line $2 = col $3 = char
@@ -231,17 +261,17 @@ draw_star () {
 	tail_line_end=$(( $1 - $star_tail_length ))
 
 	# draw head
-	draw_at "$1" "$2" "$star_head_char"
+	draw_at "$1" "$2" "."
 	
 	# draw tail
 	for x in $(seq $tail_line_start -1 $tail_line_end);
 	do
-		if [[ $x -lt 0 ]];
+		if [[ $x -lt $margin_top ]];
 		then
 			break
 		fi
 
-		draw_at "$x" "$2" "$star_tail_char"
+		draw_at "$x" "$2" "1"
 	done
 }
 
