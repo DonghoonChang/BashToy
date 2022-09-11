@@ -2,7 +2,7 @@
 
 # SCREEN(Frames)
 read_timeout=0.01
-refresh_interval=0.001
+refresh_interval=0.00
 
 # Screen(Size)
 screen_cols=0
@@ -15,7 +15,7 @@ top_margin_left=15
 margin_left=35
 margin_right=35
 margin_bottom=15
-margin_top=16
+margin_top=17
 
 # INPUT
 input_chars_count=3 # max number of input chars per frame
@@ -41,7 +41,7 @@ star_state_none=0
 star_state_created=1
 
 # Debug
-debug_line=50
+debug_line=70
 debug_col=5
 
 # Assets
@@ -112,7 +112,7 @@ init () {
 	then
 		echo "Debuggging Set"
 		DEBUG=1
-		sleep 1
+		sleep 0.5
 	fi
 
 	if [[ $1 == "-D" ]];
@@ -121,7 +121,7 @@ init () {
 		echo "Print files are not removed after exit"
 		REMOVE_PRINT_FILES=0
 		DEBUG=1
-		sleep 1
+		sleep 0.5
 	fi
 
 	for x in $(seq 0 1 $(( $stars_count_max - 1)));
@@ -162,6 +162,7 @@ update_stars () {
 		if [[ ${star_lines[$x]} -eq $star_state_eol ]];
 		then
 			star_lines[$x]="$star_state_none"
+			star_cols[$x]="0"
 			continue
 		fi
 
@@ -293,20 +294,24 @@ draw_stars () {
 # Debugging
 print_star_lines () {
 	tput cup $debug_line $debug_col 
-	echo -n "Star Lines: ${star_lines[@]}"
+	tput el
+	echo "Star Lines: ${star_lines[@]}"
 }
 
 print_star_cols () {
 	tput cup $(( $debug_line + 1 )) $debug_col
-	echo -n "Star Cols: ${star_cols[@]}"
+	tput el
+	echo "Star Cols: ${star_cols[@]}"
 }
 
 print_input_buffer () {
-	tput cup $(( $debug_line + 3 )) $debug_col
-	echo -n "Input Buffer: $input_buffer"
+	tput cup $(( $debug_line + 2 )) $debug_col
+	tput el
+	echo "Input Buffer: $input_buffer"
 	
-	tput cup $(( $debug_line + 4 )) $debug_col
-	echo -n "Next Char: $next_char"
+	tput cup $(( $debug_line + 3 )) $debug_col
+	tput el
+	echo "Next Char: $next_char"
 }
 
 print_states () {
