@@ -35,7 +35,7 @@ stars_diagonal=1 # 0=vertical | 1=diagonal
 star_tail_char="|"
 star_tail_char_diagonal="/"
 star_head_char="*"
-star_tail_length=5
+star_tail_length=2
 
 
 # STARS(State)
@@ -257,7 +257,7 @@ render () {
 		tput clear 
 		echo "Increase the terminal size"
 		screen_too_small=1
-		sleep 2
+		sleep 1
 		return
 	fi
 
