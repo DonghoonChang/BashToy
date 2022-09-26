@@ -1,21 +1,22 @@
 #!/bin/bash
 
 # SCREEN(Frames)
-read_timeout=0.01
-refresh_interval=0.00
+read_timeout=0.001
+refresh_interval=0.001
 
 # Screen(Size)
 screen_cols=0
 screen_lines=0
 screen_available_cols=0
 screen_available_lines=0
+screen_too_small=0
 
 # Stars Gen Boundary
-top_margin_left=15
+top_margin_left=0
 margin_left=35
-margin_right=35
+margin_right=5
 margin_bottom=15
-margin_top=17
+margin_top=18
 
 # INPUT
 input_chars_count=3 # max number of input chars per frame
@@ -30,10 +31,12 @@ bg_char=" "
 
 # STARS(Appearance)
 stars_count_max=10
+stars_diagonal=1 # 0=vertical | 1=diagonal
 star_tail_char="|"
+star_tail_char_diagonal="/"
 star_head_char="*"
 star_tail_length=5
-star_speed=1 #downward speed per frame
+
 
 # STARS(State)
 star_state_eol=-1 #End of Life
@@ -41,16 +44,13 @@ star_state_none=0
 star_state_created=1
 
 # Debug
-debug_line=70
-debug_col=5
+debug_line=30
+debug_col=130
 
 # Assets
 assets_cloud_top="cloud_top.txt"
-assets_cloud_large="cloud_large.txt"
-assets_cloud_medium="cloud_medium.txt"
-assets_cloud_small_1="cloud_small_1.txt"
-assets_cloud_small_2="cloud_small_2.txt"
-
+assets_cloud_top_cols=180
+assets_cloud_top_lines=18
 
 declare -a star_lines
 declare -a star_cols
@@ -106,7 +106,7 @@ init () {
 	setup_cleanup
 	get_screen_size
 
-	stars_count_max=$(( $screen_cols / 5 ))
+	#stars_count_max=$(( $screen_cols / 10 ))
 
 	if [[ $1 == "-d" ]];
 	then
@@ -179,7 +179,13 @@ update_stars () {
 draw_line () {
 	declare -a new_line
 	
-	for x in $(seq 0 $(( $screen_cols - 1)));
+	_tail_char="|"
+	if [[ $stars_diagonal -eq 1 ]];
+	then
+		_tail_char="$star_tail_char_diagonal"
+	fi
+
+	for x in $(seq 0 $(( $screen_cols - 1 - $stars_diagonal )));
 	do
 		new_line[$x]="$bg_char"
 	done
@@ -202,7 +208,7 @@ draw_line () {
 
 		if [[ $_line -le $(( $star_state_created + $star_tail_length)) ]]; 
 		then
-			new_line[$_col]="$star_tail_char"
+			new_line[$_col]="$_tail_char"
 		fi
 	done
 
@@ -213,41 +219,58 @@ draw_line () {
 }
 
 draw_stars_from_file () {
-	cat "$file_print"
-}
-
-draw_margin_top () {
-	for x in $(seq 1 $margin_top);
+	tput cup "$margin_top" 0
+	#cat "$file_print"
+	
+	_counter=0
+	while IFS= read -r line
 	do
-		printf "\n"
-	done
+		(( _counter ++ ))
+		_counter=$(( $_counter % 5 ))
+		echo -n "$line"
+	done < "$file_print"
 }
 
 draw_fg_top () {
-	tput home
+	_margin=0
+	_space=""
+
+	if [ "$screen_cols" -ge "$assets_cloud_top_cols" ];
+	then
+		_margin=$(( ($screen_cols -$assets_cloud_top_cols) / 2 ))
+		_space=$(printf "%*s" "$_margin" "")
+	fi
+
 	while IFS= read -r line
 	do
-		for x in $(seq 1 $top_margin_left);
-		do
-			printf "%.*s" "$x" " "
-		done
-		echo "$line"
+		printf "%s%s\n" "$_space" "$line"
 	done < "$assets_cloud_top"
 }
 
+render_once() {
+	draw_fg_top
+}
 
 render () {
-	#draw_stars
-	#sleep 0.01
+	if [ $screen_cols -lt $assets_cloud_top_cols ] ;
+	then
+		tput clear 
+		echo "Increase the terminal size"
+		screen_too_small=1
+		sleep 2
+		return
+	fi
 
-	#Middle Layer
+	if [ $screen_too_small -eq 1 ] && [ $screen_cols -ge $assets_cloud_top_cols ];
+	then
+		clear
+		draw_fg_top
+		screen_too_small=0
+	fi
+
+	# Stars
 	draw_line
-	tput home
-	draw_margin_top
 	draw_stars_from_file
-
-	#Foregound
-	draw_fg_top
 }
 
 # $1 = line $2 = col $3 = char
@@ -294,24 +317,20 @@ draw_stars () {
 # Debugging
 print_star_lines () {
 	tput cup $debug_line $debug_col 
-	tput el
-	echo "Star Lines: ${star_lines[@]}"
+	echo -n "Star Lines: ${star_lines[@]}"
 }
 
 print_star_cols () {
 	tput cup $(( $debug_line + 1 )) $debug_col
-	tput el
-	echo "Star Cols: ${star_cols[@]}"
+	echo -n "Star Cols: ${star_cols[@]}"
 }
 
 print_input_buffer () {
 	tput cup $(( $debug_line + 2 )) $debug_col
-	tput el
-	echo "Input Buffer: $input_buffer"
+	echo -n "Input Buffer: $input_buffer"
 	
 	tput cup $(( $debug_line + 3 )) $debug_col
-	tput el
-	echo "Next Char: $next_char"
+	echo -n "Next Char: $next_char"
 }
 
 print_states () {
@@ -338,9 +357,13 @@ cleanup () {
 
 # Init
 init "$@"
+render_once
 
 while true;
 do
+	# Update Screen size
+	get_screen_size
+
 	# Input
 	read_input
 	apply_input
@@ -349,15 +372,9 @@ do
 	render
 
 	# Debugging
-	if [[ $DEBUG -eq 1 ]];
-	then
-		print_states
-	fi
 
 	# State Management
 	update_stars
-
-	sleep $refresh_interval
 done
 
 stty echo
