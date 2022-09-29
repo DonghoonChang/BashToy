@@ -1,4 +1,4 @@
 # BashToy
-Makes ASCII rain in shell
+Makes ASCII rain in shell in response to button press
 
-![ezgif-1-d9fe0289b9](https://user-images.githubusercontent.com/28885052/192320596-9c5bd2c0-5d36-41d4-9571-3185ace4e82c.gif)
+![ezgif com-gif-maker](https://user-images.githubusercontent.com/28885052/193029247-a1e52dd7-85b2-4bee-a9c5-7a072f1e6d19.gif)
